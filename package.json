@@ -1,0 +1,23 @@
+{
+  "name": "serverless_library",
+  "version": "1.0.0",
+  "description": "A collection of all of the serverless functions (and associated tools) used by the Sales & Solutions Engineering team.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/helpshift-solutions/serverless_library.git"
+  },
+  "keywords": [
+    "serverless",
+    "SSE"
+  ],
+  "author": "Helpshift SSE",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/helpshift-solutions/serverless_library/issues"
+  },
+  "homepage": "https://github.com/helpshift-solutions/serverless_library#readme"
+}
