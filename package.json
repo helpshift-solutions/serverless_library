@@ -19,5 +19,10 @@
   "bugs": {
     "url": "https://github.com/helpshift-solutions/serverless_library/issues"
   },
-  "homepage": "https://github.com/helpshift-solutions/serverless_library#readme"
+  "homepage": "https://github.com/helpshift-solutions/serverless_library#readme",
+  "devDependencies": {
+    "express": "^4.17.x",
+    "lambda-local": "^1.7.x",
+    "nodemon": "^2.0.x"
+  }
 }
