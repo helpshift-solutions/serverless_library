@@ -4,6 +4,7 @@
   "description": "A collection of all of the serverless functions (and associated tools) used by the Sales & Solutions Engineering team.",
   "main": "index.js",
   "scripts": {
+    "start": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
