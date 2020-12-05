@@ -289,9 +289,17 @@ async function retryFunctionCall(p_function_instance, p_retry_properties, ...add
             p_retry_properties = {};
         }
 
-        let retry_interval = parseInt(p_retry_properties.interval) || DEFAULT_RETRY_INTERVAL;
-        let retry_maximum = parseInt(p_retry_properties.maximum) || DEFAULT_RETRY_MAXIMUM;
+        let retry_interval = parseInt(p_retry_properties.interval);
+        let retry_maximum = parseInt(p_retry_properties.maximum);
         let validation_function = p_retry_properties.validationFunction;
+
+        if (isNaN(retry_interval) || retry_interval < 0) {
+            retry_interval = DEFAULT_RETRY_INTERVAL;
+        }
+
+        if (isNaN(retry_maximum) || retry_maximum < 0) {
+            retry_maximum = DEFAULT_RETRY_MAXIMUM;
+        }
 
         let operation_result;
         let retry_flag = false;
@@ -593,82 +601,84 @@ async function retrieveTicketByExternalID(p_external_id) {
 
     let external_id = parseInt(p_external_id);
 
-    if (!isNaN(external_id)) {
+    if (isNaN(external_id)) {
 
-        let request_options = {
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': `Basic ${ZD_AUTH_STRING}`,
-                'Content-Type': 'application/json',
-            },
-            hostname: `${ZD_DOMAIN}.zendesk.com`,
-            maxRedirects: 20,
-            method: 'GET',
-            path: `/api/v2/tickets/${external_id}`
-        };
-        
-        return new Promise((resolve, reject) => {
+        throw new Error(`The specified external ticket id is not valid: ${external_id}`);
+    }
+
+    let request_options = {
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': `Basic ${ZD_AUTH_STRING}`,
+            'Content-Type': 'application/json',
+        },
+        hostname: `${ZD_DOMAIN}.zendesk.com`,
+        maxRedirects: 20,
+        method: 'GET',
+        path: `/api/v2/tickets/${external_id}`
+    };
     
-            const request = HTTPS.request(request_options, response => {
-                
-                let response_body_string = '';
-                let status_code = response.statusCode;
-                
-                if ((status_code >= 200) && (status_code < 300)) {
+    return new Promise((resolve, reject) => {
+
+        const request = HTTPS.request(request_options, response => {
+            
+            let response_body_string = '';
+            let status_code = response.statusCode;
+            
+            if ((status_code >= 200) && (status_code < 300)) {
+
+                console.log(`statusCode: ${status_code}`);
     
-                    console.log(`statusCode: ${status_code}`);
-        
-                    response.on('data', d => {
-                        // process.stdout.write(`An error occurred (${status_code}) while attempting to make a request to Zendesk to retrieve the ticket by its external ID.\n`);
-                        // process.stdout.write(d);
-                        response_body_string = response_body_string + Buffer.from(d).toString();
-                    });
-    
-                    response.on('end', () => {
+                response.on('data', d => {
+                    // process.stdout.write(`An error occurred (${status_code}) while attempting to make a request to Zendesk to retrieve the ticket by its external ID.\n`);
+                    // process.stdout.write(d);
+                    response_body_string = response_body_string + Buffer.from(d).toString();
+                });
+
+                response.on('end', () => {
+                    
+                    try {
+                        let response_body_object = JSON.parse(response_body_string);
                         
-                        try {
-                            let response_body_object = JSON.parse(response_body_string);
-                            
-                            if (response_body_object instanceof Object) {
-                                console.log('response_body_object');console.log(response_body_object);
+                        if (response_body_object instanceof Object) {
+                            console.log('response_body_object');console.log(response_body_object);
 
-                                let response_body_property_ticket = response_body_object['ticket'];
-                                
-                                if (response_body_property_ticket instanceof Object) {
-                                        
-                                    resolve(response_body_property_ticket);
-                                }
+                            let response_body_property_ticket = response_body_object['ticket'];
+                            
+                            if (response_body_property_ticket instanceof Object) {
+                                    
+                                resolve(response_body_property_ticket);
                             }
                         }
-    
-                        catch (e_exception) {
-                            console.error(e_exception);
-                            throw new Error(`Encountered a problem parsing the Zendesk data`);
-                        }
-                    });
-                }
-    
-                // If the status code is at an error level
-                else if (status_code >= 400) {
-    
-                    // Reject the promise
-                    reject({
-                        statusCode: status_code
-                    });
-                }
-            });
-    
-            request.on('error', error => {
-    
-                // Reject the promise with a generic error code, since the real code may be unknown
-                reject({
-                    statusCode: 400
-                });
-            });
+                    }
 
-            request.end();
+                    catch (e_exception) {
+                        console.error(e_exception);
+                        throw new Error(`Encountered a problem parsing the Zendesk data`);
+                    }
+                });
+            }
+
+            // If the status code is at an error level
+            else if (status_code >= 400) {
+
+                // Reject the promise
+                reject({
+                    statusCode: status_code
+                });
+            }
         });
-    }
+
+        request.on('error', error => {
+
+            // Reject the promise with a generic error code, since the real code may be unknown
+            reject({
+                statusCode: 400
+            });
+        });
+
+        request.end();
+    });
 }
 
 /**
