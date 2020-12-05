@@ -11,6 +11,7 @@
  */
 
 const HTTPS = require('https');
+const { type } = require('os');
 const Path = require('path');
 
 /**
@@ -165,17 +166,23 @@ function flattenFields(p_fields_object) {
     return flattened_fields;
 }
 
-/**
- * Retrieve the Zsendesk ticket ID from the originating Helpshift Issue by parsing the automated Zendesk private note
- * 
- * @param {object} p_parameters The object being used to intake a loose set of properties
- * 
- * @returns {string} Zendesk Ticket ID
- */
-async function retrieveZDTicketIDFromHSIssue(p_parameters) {
+async function retrieveHSIssueByID(p_parameters) {
 
-    if (!(p_parameters instanceof Object)) {
-        throw new Error(`The provided parameters object was not a valid Object instance: ${p_parameters}`);
+    let parameters = p_parameters;
+
+    // If the parameters were not passed in in the form of an object
+    if (!(parameters instanceof Object)) {
+
+        // If the specified parameter is just a number or a string
+        if ((typeof parameters === 'number') || (typeof parameters === 'string')) {
+            parameters = {
+                id: parameters
+            };
+        }
+
+        else {
+            throw new Error(`The provided parameters object was not a valid Object instance: ${parameters}`);
+        }
     }
 
     /// Construct the encoded Basic Authorization string
@@ -183,10 +190,10 @@ async function retrieveZDTicketIDFromHSIssue(p_parameters) {
     let authorization_basic_username = HS_API_KEY;
     let authorization_string_raw = `${authorization_basic_username}:${authorization_basic_password}`;
     let authorization_string_encoded = encodeBase64(authorization_string_raw);
-
-    let domain = p_parameters.domain;
-    let issue_id = parseInt(p_parameters.id);
-
+    
+    let domain = parameters.domain;
+    let issue_id = parseInt(parameters.id);
+    
     // If the domain is not a string or number value
     if (['number', 'string'].indexOf(typeof domain) < 0) {
         throw new Error(`The provided Helpshift domain is not valid: ${domain}`);
@@ -227,153 +234,15 @@ async function retrieveZDTicketIDFromHSIssue(p_parameters) {
 
                 response.on('end', (j) => {
 
-                    try {
-                        let response_body_object = JSON.parse(response_body_string);
+                    let response_body_object = JSON.parse(response_body_string);
                         
-                        if (response_body_object instanceof Object) {
-        
-                            // If the response does not parse into a valid Object instance
-                            if (!(response_body_object instanceof Object)) {
-                                throw new Error(`The response body is not a valid Object instance: ${response_body_object}`);
-                            }
-        
-                            let num_total_hits = response_body_object['total-hits']; // The server-calculated number of total results returned
-        
-                            // If there isn't exactly one issue in the response
-                            if (num_total_hits !== 1) {
-                                throw new Error(`The incorrect number of issues was returned in the response for retrieving the Helpshift issue (${issue_id}) by ID: ${num_total_hits}`);
-                            }
-        
-                            let issues = response_body_object['issues'];
-        
-                            // If the returned object has an "issues" property that is an Array instance
-                            if (!(issues instanceof Array)) {
-                                throw new Error(`The "issues" property in the response object is not a valid Array instance`);
-                            }
-        
-                            // If less than 1 issue was returned
-                            if (issues.length < 1) {
-                                throw new Error(`Exactly one issue was expected, but there were 0 issues returned.`);
-                            }
-        
-                            // If more than 1 issue was returned
-                            if (issues.length > 1) {
-                                throw new Error(`Exactly one issue was expected, but more than one issue was returned: ${issues.length}`);
-                            }
-        
-                            let retrieved_issue = issues[0]; // Use the issue at the first index in the array (the only issue in the array)
-                            
-                            // If the single retrieved issue is not a valid Object instance
-                            if (!(retrieved_issue instanceof Object)) {
-                                throw new Errors(`The retrieved issue is not a valid Object instance: ${retrieved_issue}`);
-                            }
-        
-                            let private_notes = retrieved_issue['private_notes'];
-        
-                            // If the "private_notes" property for the retrieved issue is not a valid Array instance
-                            if (!(private_notes instanceof Array)) {
-                                throw new Errors(`The "private_notes" property of the retrieved issue is not a valid Array instance: ${private_notes}`);
-                            }
-        
-                            let selected_private_note;
-                            let ticket_id;
-        
-                            for (let current_note of private_notes) {
-        
-                                // If the current private note is not a valid object
-                                if (!(current_note instanceof Object)) {
-                                    console.warn(`The current private note is not a valid Object instance: ${current_note}`);
-                                    continue; // Skip this private note value
-                                }
-        
-                                let current_note_author = current_note['author'];
-        
-                                // If the current private note does not have an "author" property that is an Object instnace
-                                if (!(current_note_author instanceof Object)) {
-                                    console.warn(`The "author" property for the current private note is not a valid Object instance: ${current_note_author}`);
-                                }
-        
-                                let current_note_author_name = `${current_note_author['name'] || ''}`.toLowerCase();
-        
-                                // If the name of the author for the current private note is not the API bot's name
-                                // Note: Not an immediate need, but it would be more robust to go off of an immutable ID instead of the name string
-                                if (current_note_author_name !== 'api-bot') {
-                                    continue;
-                                }
-        
-                                let current_note_body = current_note['body'];
-        
-                                // If the body of the current private note is not a string
-                                if (!(typeof current_note_body === 'string')) {
-                                    console.warn(`The body of the current private note is not a valid string value: ${current_note_body}`);
-                                }
-                                
-                                let matched_urls = current_note_body.match(/(http|https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])?/gi);
-        
-                                // If an Array instance is not produced as a result of the string RegEx match() method, this could mean either no URL match was found, or an error occurred
-                                if (!(matched_urls instanceof Array)) {
-                                    continue; // Regardless, skip to the next private note since the current one does not have a URL to reference
-                                }
-        
-                                // Choose the very last matched URL
-                                let last_matched_url_raw = matched_urls[matched_urls.length - 1];
-                                let last_matched_url_parsed;
-        
-                                try {
-                                    last_matched_url_parsed = new URL(last_matched_url_raw);
-                                }
-                                
-                                catch (e_exception) {
-                                    console.error(`An error occurred when attempting to process the last matched URL: ${last_matched_url_raw}`);
-                                    console.error(e_exception);
-        
-                                    continue; // Skip to the next private note
-                                }
-        
-                                let url_pathname = last_matched_url_parsed.pathname;
-        
-                                // If the path name of the parsed URL is not a string value
-                                if (!(typeof url_pathname === 'string')) {
-                                    console.warn(`The path name of the parsed URL is not a string value: ${url_pathname}`);
-                                    continue; // Skip to the next private note
-                                }
-        
-                                let parsed_url_pathname = Path.parse(url_pathname);
-        
-                                // If the parsing of the URL pathname does not result in a valid, usable Object instance
-                                if (!(parsed_url_pathname instanceof Object)) {
-                                    console.error(`The parsed URL pathname did not resolve into a valid Object instnace: ${parsed_url_pathname}`);
-                                    continue; // Skip to the next private note
-                                }
-        
-                                let ticket_id_raw = parsed_url_pathname['name']; // Use the "name" property as the ID of the Zendesk ticket
-        
-                                // If the raw ticket ID value is not a number or a string type
-                                if (['number', 'string'].indexOf(typeof ticket_id_raw) < 0) {
-                                    console.error(`The "name" property of the parsed url pathname does not contain a valid number or string value, so it cannot be used as the ticket ID: ${ticket_id_raw}`);
-                                    continue; // Skip to the next private note
-                                }
-        
-                                // Set the persisting values to the current values from within the current loop iteration
-                                selected_private_note = current_note;
-                                ticket_id = ticket_id_raw;
-        
-                                break; // If this point is reached without exception, then the loop can be exited
-                            }
-        
-                            // If the ticket ID value is not a number or a string type
-                            if (['number', 'string'].indexOf(typeof ticket_id) < 0) {
-                                throw new Error(`No valid ticket ID value was able to be found from the specified Helpshift issue: ${issue_id}`);
-                            }
-        
-                            // Resolve the promise as a success, providing the extracted ticket ID as the result of the executed promise
-                            resolve(ticket_id);
-                        }
+                    if (response_body_object instanceof Object) {
+                        
+                        resolve(response_body_object);
                     }
 
-                    catch (e_exception) {
-                        console.error(e_exception);
-                        throw new Error(`Encountered a problem parsing the Zendesk data`);
+                    else {
+                        resolve(response_body_string);
                     }
                 });
             }
@@ -398,6 +267,321 @@ async function retrieveZDTicketIDFromHSIssue(p_parameters) {
 
         request.end();
     });
+}
+
+async function retryFunctionCall(p_function_instance, p_retry_properties, ...additional_instance_arguments) {
+
+    const DEFAULT_RETRY_INTERVAL = parseInt(process.env.HS_DEFAULT_RETRY_INTERVAL) || 1500; // Default to 1.5 seconds per retry
+    const DEFAULT_RETRY_MAXIMUM = parseInt(process.env.HS_DEFAULT_RETRY_MAXIMUM) || 0; // Default to no retries
+    
+    return new Promise(async function(resolve, reject) {
+        
+        if (!(p_function_instance instanceof Function)) {
+            throw new TypeError(`The specified function is not an instance of the Function class: ${p_function_instance}`);
+        }
+
+        if (!(p_retry_properties instanceof Object)) {
+
+            if (typeof p_retry_properties !== 'undefined') {
+                throw new TypeError(`The specified "retry" properties must be an instance the Object class: ${p_retry_properties}`);
+            }
+
+            p_retry_properties = {};
+        }
+
+        let retry_interval = parseInt(p_retry_properties.interval) || DEFAULT_RETRY_INTERVAL;
+        let retry_maximum = parseInt(p_retry_properties.maximum) || DEFAULT_RETRY_MAXIMUM;
+        let validation_function = p_retry_properties.validationFunction;
+
+        let operation_result;
+        let retry_flag = false;
+
+        try {
+            // Make the first call immediately
+            let returned_function_value = await p_function_instance.call(undefined, ...additional_instance_arguments);
+            
+            // If a validation function was provided
+            if (validation_function instanceof Function) {
+    
+                // Execute the validation function, passing in the operation result as the value to validate
+                let validation_result = validation_function.call(undefined, returned_function_value);
+    
+                // If the value passes validation
+                if (validation_result === true) {
+
+                    resolve(returned_function_value);
+                }
+
+                // If the value does not pass validation
+                else {
+
+                    // Indicate that a retry is needed
+                    retry_flag = true;
+                }
+
+                operation_result = returned_function_value;
+            }
+        }
+
+        catch (e_exception) {
+
+            // Since the operation failed, indicate that a retry is needed
+            retry_flag = true;
+        }
+
+        // If a retry is needed
+        if (retry_flag === true) {
+
+            // If there is no allotment for a retry
+            if (retry_maximum < 1) {
+
+                // Reject the promise using the value returned by the operation
+                reject(operation_result);
+            }
+
+            else {
+                // Adjust the existing retry properties to account for the recursive call
+                let adjusted_retry_properties = {
+                    interval: retry_interval,
+                    maximum: (retry_maximum - 1), // Reduce the maximum by one since we eventually want to reach 0 retries
+                    validationFunction: validation_function
+                };
+                
+                console.info(`The function needs to be retried. Waiting ${retry_interval}ms, and there are ${retry_maximum} attempt${(retry_maximum === 1) ? '':'s'} remaining.`);
+
+                // Pause the control flow for the amount of time indicated by the retry interval
+                setTimeout(async function() {
+                    
+                    try {
+
+                        // Recursively execute the function that needs to be retried
+                        let result_of_retry_execution = await retryFunctionCall.call(undefined, p_function_instance, adjusted_retry_properties, ...additional_instance_arguments);
+
+                        resolve(result_of_retry_execution);
+                    }
+
+                    catch (exception_from_retry_execution) {
+
+                        reject(exception_from_retry_execution);
+                    }
+
+
+                }, retry_interval);
+            }
+        }
+    });
+}
+
+/**
+ * Retrieve the Zendesk ticket ID from the originating Helpshift Issue by parsing the automated Zendesk private note
+ * 
+ * @param {object} p_parameters The object being used to intake a loose set of properties
+ * 
+ * @returns {string} Zendesk Ticket ID
+ */
+async function retrieveZDTicketIDFromHSIssue(p_parameters) {
+
+    if (!(p_parameters instanceof Object)) {
+        throw new Error(`The provided parameters object was not a valid Object instance: ${p_parameters}`);
+    }
+
+    let zendesk_ticket_id;
+    
+    let issue_retrieval_parameters = {
+        domain: p_parameters.domain,
+        id: p_parameters.id
+    };
+
+    let retry_properties = {
+        
+        validationFunction: function(value_to_validate) {
+            
+            try {
+                zendesk_ticket_id = processRetrievedIssueDataForZDID(value_to_validate);
+
+                // If the value to validate is an object
+                return (typeof zendesk_ticket_id !== 'undefined');
+            }
+
+            catch (e_exception) {
+                console.error(`\nThe validation function failed.`);
+                console.error(e_exception);
+            }
+        }
+    };
+
+    let results_retrieve_issue_by_id;
+    
+    try {
+
+        // Retrieve the issue by its ID (and any other specified parameters)
+        results_retrieve_issue_by_id = await retryFunctionCall(retrieveHSIssueByID, retry_properties, issue_retrieval_parameters);
+    }
+
+    catch (e_exception) {
+
+        console.error(e_exception);
+    }
+
+    // Return the successfully extracted ticket ID as the result of the executed operations
+    return zendesk_ticket_id;
+}
+
+function processRetrievedIssueDataForZDID(results_retrieve_issue_by_id) {
+    
+    // If the response does not parse into a valid Object instance
+    if (!(results_retrieve_issue_by_id instanceof Object)) {
+        throw new Error(`The retrieved issue data is not a valid Object instance: ${results_retrieve_issue_by_id}`);
+    }
+
+    let num_total_hits = results_retrieve_issue_by_id['total-hits']; // The server-calculated number of total results returned
+
+    // If there isn't exactly one issue in the response
+    if (num_total_hits !== 1) {
+        throw new Error(`The incorrect number of issues was returned in the response for retrieving the Helpshift issue by ID: ${num_total_hits}`);
+    }
+
+    let issues = results_retrieve_issue_by_id['issues'];
+
+    // If the returned object has an "issues" property that is an Array instance
+    if (!(issues instanceof Array)) {
+        throw new Error(`The "issues" property in the response object is not a valid Array instance`);
+    }
+
+    // If less than 1 issue was returned
+    if (issues.length < 1) {
+        throw new Error(`Exactly one issue was expected, but there were 0 issues returned.`);
+    }
+
+    // If more than 1 issue was returned
+    if (issues.length > 1) {
+        throw new Error(`Exactly one issue was expected, but more than one issue was returned: ${issues.length}`);
+    }
+
+    let retrieved_issue = issues[0]; // Use the issue at the first index in the array (the only issue in the array)
+
+    let zendesk_ticket_id = extractZDTicketIDFromHSIssueObject(retrieved_issue);
+
+    // Return the successfully extracted ticket ID as the result of the executed operations
+    return zendesk_ticket_id;
+}
+
+function extractZDTicketIDFromHSIssueObject(p_issue_object) {
+    
+    // If the expected issue value is not a valid Object instance
+    if (!(p_issue_object instanceof Object)) {
+        throw new TypeError(`The specified value to be used as an issue object is not a valid Object instance: ${p_issue_object}`);
+    }
+    
+    let private_notes = p_issue_object['private_notes'];
+
+    // If the "private_notes" property for the retrieved issue is not a valid Array instance
+    if (!(private_notes instanceof Array)) {
+        throw new Error(`The "private_notes" property of the retrieved issue is not a valid Array instance, and could mean that there are no private notes associated with the issue: ${private_notes}`);
+    }
+
+    let selected_private_note;
+    let ticket_id;
+    
+    // Iterate over each of the private notes that are found to be part of the object, until a Zendesk ticket URL reference is found
+    for (let current_note of private_notes) {
+        
+        // If the current private note is not a valid object
+        if (!(current_note instanceof Object)) {
+            console.warn(`The current private note is not a valid Object instance: ${current_note}`);
+            continue; // Skip this private note value
+        }
+
+        let current_note_author = current_note['author'];
+
+        // If the current private note does not have an "author" property that is an Object instnace
+        if (!(current_note_author instanceof Object)) {
+            console.warn(`The "author" property for the current private note is not a valid Object instance: ${current_note_author}`);
+        }
+
+        let current_note_author_name = `${current_note_author['name'] || ''}`.toLowerCase();
+
+        // If the name of the author for the current private note is not the API bot's name
+        // Note: Not an immediate need, but it would be more robust to go off of an immutable ID instead of the name string
+        if (current_note_author_name !== 'api-bot') {
+            // continue;
+        }
+
+        let current_note_body = current_note['body'];
+        
+        try {
+
+            let ticket_id_raw = extractZendeskTicketIDFromText(current_note_body);
+
+            // Set the persisting values to the current values from within the current loop iteration
+            selected_private_note = current_note;
+            ticket_id = ticket_id_raw;
+
+            break; // If this point is reached without exception, then the loop can be exited
+        }
+
+        catch (e_exception) {
+            continue;
+        }
+    }
+
+    // If the ticket ID value is not a number or a string type
+    if (['number', 'string'].indexOf(typeof ticket_id) < 0) {
+        throw new Error(`No valid ticket ID value was able to be found from the specified Helpshift issue with the following ID: ${p_issue_object.id}`);
+    }
+
+    return ticket_id;
+}
+
+function extractZendeskTicketIDFromText(p_text) {
+
+    // If the body of the current private note is not a string
+    if (!(typeof p_text === 'string')) {
+        console.warn(`The body of the current private note is not a valid string value: ${p_text}`);
+    }
+    
+    let matched_urls = p_text.match(/(http|https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])?/gi);
+
+    // If an Array instance is not produced as a result of the string RegEx match() method, this could mean either no URL match was found, or an error occurred
+    if (!(matched_urls instanceof Array)) {
+        throw new Error(`No match was found for: ${p_text}`); // Regardless, skip to the next private note since the current one does not have a URL to reference
+    }
+
+    // Choose the very last matched URL
+    let last_matched_url_raw = matched_urls[matched_urls.length - 1];
+    let last_matched_url_parsed;
+
+    try {
+        last_matched_url_parsed = new URL(last_matched_url_raw);
+    }
+    
+    catch (e_exception) {
+        console.error(`An error occurred when attempting to process the last matched URL: ${last_matched_url_raw}`);
+        throw new Error(e_exception);
+    }
+
+    let url_pathname = last_matched_url_parsed.pathname;
+
+    // If the path name of the parsed URL is not a string value
+    if (!(typeof url_pathname === 'string')) {
+        console.warn(`The path name of the parsed URL is not a string value: ${url_pathname}`);
+    }
+
+    let parsed_url_pathname = Path.parse(url_pathname);
+
+    // If the parsing of the URL pathname does not result in a valid, usable Object instance
+    if (!(parsed_url_pathname instanceof Object)) {
+        throw new TypeError(`The parsed URL pathname did not resolve into a valid Object instnace: ${parsed_url_pathname}`);
+    }
+
+    let ticket_id_raw = parsed_url_pathname['name']; // Use the "name" property as the ID of the Zendesk ticket
+
+    // If the raw ticket ID value is not a number or a string type
+    if (['number', 'string'].indexOf(typeof ticket_id_raw) < 0) {
+        throw new Error(`The "name" property of the parsed url pathname does not contain a valid number or string value, so it cannot be used as the ticket ID: ${ticket_id_raw}`);
+    }
+
+    return ticket_id_raw;
 }
 
 /**
@@ -531,7 +715,7 @@ async function updateTicketFields(p_ticket_id, p_fields_to_update) {
                 value: current_field_value
             });
         }
-        console.log('payload.ticket.fields');console.log(payload.ticket.fields);
+        
         let payload_stringified = JSON.stringify(payload);
         
         return new Promise((resolve, reject) => {
@@ -599,33 +783,43 @@ exports.handler = async (event) => {
     // Make sure the body value is parsed as into a JSON object
     if (!(event_body instanceof Object)) { event_body = JSON.parse(event_body); }
 
-    // Extract event details
-    let event_details = extractEventDetails(event_body);
+    try {
 
-    // Retrieve the Zendesk ticket ID by way of the Helpshift Issue ID
-    let zendesk_ticket_id = await retrieveZDTicketIDFromHSIssue({domain: event_details.domain, id: event_details.id});
-    
-    // Retrieve ticket by external ID
-    let retrieved_ticket = await retrieveTicketByExternalID(zendesk_ticket_id);
+        // Extract event details
+        let event_details = extractEventDetails(event_body);
 
-    // Flatten the field names from Helpshift so that they can be passed into Zendesk
-    let fields_to_change_flattened = flattenFields(event_details.fields);
-    
-    // Update the corresponding ticket details in Zendesk
-    let result_update_ticket_fields = await updateTicketFields(retrieved_ticket.id, fields_to_change_flattened);
+        // Retrieve the Zendesk ticket ID by way of the Helpshift Issue ID
+        let zendesk_ticket_id = await retrieveZDTicketIDFromHSIssue({domain: event_details.domain, id: event_details.id});
+        
+        // Retrieve ticket by external ID
+        let retrieved_ticket = await retrieveTicketByExternalID(zendesk_ticket_id);
 
-    // If the result of the update to the ticket's fields is TRUE (successful)
-    if (result_update_ticket_fields === true) {
-        status_code = 200;
+        // Flatten the field names from Helpshift so that they can be passed into Zendesk
+        let fields_to_change_flattened = flattenFields(event_details.fields);
+        
+        // Update the corresponding ticket details in Zendesk
+        let result_update_ticket_fields = await updateTicketFields(retrieved_ticket.id, fields_to_change_flattened);
+
+        // If the result of the update to the ticket's fields is TRUE (successful)
+        if (result_update_ticket_fields === true) {
+            status_code = 200;
+        }
+        
+        // TODO implement
+        const response = {
+            statusCode: status_code,
+            body: JSON.stringify(fields_to_change_flattened),
+        };
+        
+        return response;
     }
-    
-    // TODO implement
-    const response = {
-        statusCode: status_code,
-        body: JSON.stringify(fields_to_change_flattened),
-    };
-    
-    return response;
+
+    catch (e_exception) {
+
+        console.error(e_exception);
+
+        throw e_exception;
+    }
 };
 
 
