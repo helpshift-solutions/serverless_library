@@ -4,6 +4,7 @@
   "description": "A collection of all of the serverless functions (and associated tools) used by the Sales & Solutions Engineering team.",
   "main": "index.js",
   "scripts": {
+    "email": "node scripts/email/send",
     "start": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -25,5 +26,20 @@
     "express": "^4.17.x",
     "lambda-local": "^1.7.x",
     "nodemon": "^2.0.x"
+  },
+  "dependencies": {
+    "@ranedrop/errors": "^1.6.1",
+    "@ranedrop/utility": "^2.2.2",
+    "@ranedrop/validator": "^2.3.1",
+    "axios": "^0.21.1",
+    "axios-cookiejar-support": "^1.0.1",
+    "csv-writer": "^1.6.0",
+    "fast-csv": "^4.3.6",
+    "file-system": "^2.2.2",
+    "html-entities": "^2.1.0",
+    "retry-axios": "^2.4.0",
+    "striptags": "^3.1.1",
+    "sugar": "^2.0.6",
+    "tough-cookie": "^4.0.0"
   }
 }
