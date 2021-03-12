@@ -15,8 +15,6 @@ const Sugar = require(`sugar`);
 const Tough = require('tough-cookie');
 const Utility = require('@ranedrop/utility');
 const Validator = require('@ranedrop/validator');
-const { ensureArray } = require('@ranedrop/utility');
-const { default: axios } = require('axios');
 
 const GENERIC_RAX_CONFIG = {
     backoffType: 'static',
