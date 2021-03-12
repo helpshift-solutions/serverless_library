@@ -106,3 +106,10 @@ dist
 # Lockfiles
 package-lock.json
 yarn.lock
+
+# Custom Folders
+data/
+output/
+
+# System Files
+.DS_Store
