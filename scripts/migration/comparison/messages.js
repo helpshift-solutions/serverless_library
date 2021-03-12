@@ -29,9 +29,9 @@ const GENERIC_RAX_CONFIG = {
     statusCodesToRetry: [[429, 429]]
 };
 
-const HS_DOMAIN_ID = 'flipgridsupport';
+const HS_DOMAIN_ID = '';
 const HS_DOMAIN_TYPE = '';
-const HS_API_KEY_READ = 'flipgridsupport_api_20210308140907621-784fba9e1e2a96e';
+const HS_API_KEY_READ = '';
 const HS_API_KEY_WRITE = '';
 const HS_APP_ID = 'flipgridsupport_app_20210204194208129-80db666c98cebc6';
 
